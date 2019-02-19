@@ -5,11 +5,11 @@ import os
 import codecs
 from setuptools import setup, find_packages
 
-PACKAGENAME = 'vaultutils'
+PACKAGENAME = 'lsstvaultutils'
 DESCRIPTION = 'LSST SQuaRE Vault utilities'
 AUTHOR = 'Adam Thornton'
 AUTHOR_EMAIL = 'athornton@lsst.org'
-URL = 'https://github.com/lsst-sqre/vaultutils'
+URL = 'https://github.com/lsst-sqre/lsstvaultutils'
 LICENSE = 'MIT'
 
 
@@ -59,9 +59,9 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'copyk2v = vaultutils.secretcopier:standalonek2v',
-            'copyv2k = vaultutils.secretcopier:standalonev2k',
-            'tokenadmin = vaultutils.tokenadmin:standalone'
+            'copyk2v = lsstvaultutils.secretcopier:standalonek2v',
+            'copyv2k = lsstvaultutils.secretcopier:standalonev2k',
+            'tokenadmin = lsstvaultutils.tokenadmin:standalone'
         ]
     },
 )
