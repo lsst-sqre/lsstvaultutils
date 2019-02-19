@@ -240,13 +240,6 @@ class AdminTool(object):
         self.logger.debug("Deleting token store for '%s'." % path)
         self.vault_client.delete(tok_store)
 
-    def delete_secrets(self, path):
-        """Remove a path containing secrets.
-        """
-        sec = "secret/" + path
-        self.logger.debug("Deleting secrets at and under '%s'." % sec)
-        self.vault_client.delete(sec)
-
 
 if __name__ == '__main__':
     standalone()

@@ -54,11 +54,13 @@ setup(
     packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
         'hvac<1.0.0',
-        'kubernetes<10.0.0'
+        'kubernetes<10.0.0',
+        'click<8.0.0'
     ],
     entry_points={
         'console_scripts': [
-            'secretcopier = vaultutils.secretcopier:standalone',
+            'copyk2v = vaultutils.secretcopier:standalonek2v',
+            'copyv2k = vaultutils.secretcopier:standalonev2k',
             'tokenadmin = vaultutils.tokenadmin:standalone'
         ]
     },
