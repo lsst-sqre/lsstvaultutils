@@ -6,7 +6,7 @@ token IDs in a place accessible to a Vault admin token (or removes them).
 import click
 import hvac
 import logging
-import os
+from .timeformatter import TimeFormatter
 
 POLICY_ROOT = "policy/delegated"
 SECRET_ROOT = "secret/delegated"
@@ -23,10 +23,12 @@ SECRET_ROOT = "secret/delegated"
               help="Path to Vault CA certificate.")
 @click.option('--ttl', envvar="VAULT_TTL", default="8766h",
               help="TTL for tokens [ 1 year = \"8776h\" ]")
-def standalone(verb, vault_secret_path, url, token, cacert, ttl):
+@click.option('--debug', envvar='DEBUG', is_flag=True,
+              help="Enable debugging.")
+def standalone(verb, vault_secret_path, url, token, cacert, ttl, debug):
     """Run as standalone program.
     """
-    client = AdminTool(url, token, cacert, ttl)
+    client = AdminTool(url, token, cacert, ttl, debug)
     client.execute(verb, vault_secret_path)
 
 
@@ -44,16 +46,16 @@ class AdminTool(object):
     """Class to build and destroy token hierarchy in LSST taxonomy.
     """
 
-    def __init__(self, url, token, cacert, ttl='8766h'):
-        debug = os.getenv('DEBUG')
+    def __init__(self, url, token, cacert, ttl='8766h', debug=False):
         logger = logging.getLogger(__name__)
         if debug:
             logger.setLevel(logging.DEBUG)
         ch = logging.StreamHandler()
         if debug:
             ch.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = TimeFormatter(
+            '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
         ch.setFormatter(formatter)
         logger.addHandler(ch)
         self.logger = logger

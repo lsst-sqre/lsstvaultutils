@@ -3,12 +3,12 @@
 """
 
 import logging
-import os
 import click
 import hvac
 from base64 import b64decode, b64encode
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from .timeformatter import TimeFormatter
 
 
 @click.command()
@@ -20,8 +20,13 @@ from kubernetes.client.rest import ApiException
               help="Vault token to use.")
 @click.option('--cacert', envvar='VAULT_CAPATH',
               help="Path to Vault CA certificate.")
-def standalonek2v(url, token, cacert, k8s_secret_name, vault_secret_path):
-    client = SecretCopier(url, token, cacert)
+@click.option('--debug', envvar='DEBUG', is_flag=True,
+              help="Enable debugging.")
+def standalonek2v(url, token, cacert, k8s_secret_name, vault_secret_path,
+                  debug):
+    """Copy from Kubernetes to Vault.
+    """
+    client = SecretCopier(url, token, cacert, debug)
     client.copy_k8s_to_vault(k8s_secret_name, vault_secret_path)
 
 
@@ -34,22 +39,30 @@ def standalonek2v(url, token, cacert, k8s_secret_name, vault_secret_path):
               help="Vault token to use.")
 @click.option('--cacert', envvar='VAULT_CAPATH',
               help="Path to Vault CA certificate.")
-def standalonev2k(url, token, cacert, k8s_secret_name, vault_secret_path):
-    client = SecretCopier(url, token, cacert)
+@click.option('--debug', envvar='DEBUG', is_flag=True,
+              help="Enable debugging.")
+def standalonev2k(url, token, cacert, k8s_secret_name, vault_secret_path,
+                  debug):
+    """Copy from Vault to Kubernetes.
+    """
+    client = SecretCopier(url, token, cacert, debug)
     client.copy_vault_to_k8s(vault_secret_path, k8s_secret_name)
 
 
 class SecretCopier(object):
-    def __init__(self, url, token, cacert):
-        debug = os.getenv('DEBUG')
+    """Class to copy secrets between Kubernetes and Vault.
+    """
+
+    def __init__(self, url, token, cacert, debug=False):
         logger = logging.getLogger(__name__)
         if debug:
             logger.setLevel(logging.DEBUG)
         ch = logging.StreamHandler()
         if debug:
             ch.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = TimeFormatter(
+            '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
         ch.setFormatter(formatter)
         logger.addHandler(ch)
         self.logger = logger
@@ -74,12 +87,16 @@ class SecretCopier(object):
         return client
 
     def get_k8s_client(self):
+        """Acquire a Kubernetes client from currently-selected config.
+        """
         self.logger.debug("Acquiring k8s client.")
         config.load_kube_config()
         k8s_client = client.CoreV1Api()
         return k8s_client
 
     def encode_secret_data(self):
+        """Base64-encode secret data for Kubernetes storage.
+        """
         self.logger.debug("Base64-encoding secret data")
         self.encoded_secret = {}
         for k in self.secret:
@@ -87,6 +104,8 @@ class SecretCopier(object):
                 self.secret[k].encode('utf-8')).decode('utf-8')
 
     def read_k8s_secret(self, k8s_secret_name):
+        """Read a secret from Kubernetes.
+        """
         self.logger.debug("Reading secret from '%s' " % k8s_secret_name +
                           " in namespace '%s'." % self.namespace)
         secret = self.k8s_client.read_namespaced_secret(
@@ -96,19 +115,29 @@ class SecretCopier(object):
         self.secret = {}
         for k in data:
             v = data[k]
-            self.secret[k] = b64decode(v).decode('utf-8')
+            if v:
+                self.secret[k] = b64decode(v).decode('utf-8')
+            else:
+                self.secret[k] = v
 
     def write_vault_secret(self, vault_secret_path):
+        """Write a secret to Vault.
+        """
         self.logger.debug("Writing secret to '%s'." % vault_secret_path)
         for k in self.secret:
-            self.vault_client.write(vault_secret_path + "/" + k,
-                                    value=self.secret[k])
+            spath = vault_secret_path + "/" + k
+            self.logger.debug("Writing secret to '%s'." % spath)
+            self.vault_client.write(spath, value=self.secret[k])
 
     def copy_k8s_to_vault(self, k8s_secret_name, vault_secret_path):
+        """Copy secret from Kubernetes to Vault.
+        """
         self.read_k8s_secret(k8s_secret_name)
         self.write_vault_secret(vault_secret_path)
 
     def read_vault_secret(self, vault_secret_path):
+        """Read a secret from Vault.
+        """
         self.logger.debug("Reading secret from '%s'." % vault_secret_path)
         path = vault_secret_path
         pathcomps = path.split('/')
@@ -131,6 +160,8 @@ class SecretCopier(object):
         self.secret = valdata
 
     def write_k8s_secret(self, k8s_secret_name):
+        """Write a secret to Kubernetes.
+        """
         oldsecret = None
         self.logger.debug("Determining whether secret '%s'" % k8s_secret_name +
                           "exists in namespace '%s'." % self.namespace)
@@ -165,6 +196,8 @@ class SecretCopier(object):
                                                      secret)
 
     def copy_vault_to_k8s(self, vault_secret_path, k8s_secret_name):
+        """Copy a secret from Vault to Kubernetes.
+        """
         self.read_vault_secret(vault_secret_path)
         self.write_k8s_secret(k8s_secret_name)
 

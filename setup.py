@@ -61,7 +61,8 @@ setup(
         'console_scripts': [
             'copyk2v = lsstvaultutils.secretcopier:standalonek2v',
             'copyv2k = lsstvaultutils.secretcopier:standalonev2k',
-            'tokenadmin = lsstvaultutils.tokenadmin:standalone'
+            'tokenadmin = lsstvaultutils.tokenadmin:standalone',
+            'vaultrmrf = lsstvaultutils.recursivedeleter:standalone'
         ]
     },
 )
