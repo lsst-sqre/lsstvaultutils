@@ -1,15 +1,19 @@
 #!/usr/bin/env python
-"""tokenadmin uses the SQuaRE taxonomy to create or revoke a trio of access
-tokens for a particular path in the Vault secret space, and stores those
-token IDs in a place accessible to a Vault admin token (or removes them).
+"""tokenadmin uses the SQuaRE taxonomy and an amdin token to create or
+revoke a trio of access tokens for a particular path in the Vault
+secret space, and stores those token IDs in a place accessible to a
+Vault admin token (or removes them).
+
 """
 import click
 import hvac
-import logging
-from .timeformatter import TimeFormatter
+import json
+from hvac.exceptions import InvalidPath
+from .recursivedeleter import RecursiveDeleter
+from .timeformatter import getLogger
 
-POLICY_ROOT = "policy/delegated"
-SECRET_ROOT = "secret/delegated"
+POLICY_ROOT = "delegated"
+TOKEN_SECRET_ROOT = "secret/delegated"
 
 
 @click.command()
@@ -23,12 +27,16 @@ SECRET_ROOT = "secret/delegated"
               help="Path to Vault CA certificate.")
 @click.option('--ttl', envvar="VAULT_TTL", default="8766h",
               help="TTL for tokens [ 1 year = \"8776h\" ]")
+@click.option('--overwrite', envvar='VAULT_OVERWRITE', is_flag=True,
+              help="Revoke existing tokens/overwrite existing policies.")
 @click.option('--debug', envvar='DEBUG', is_flag=True,
               help="Enable debugging.")
-def standalone(verb, vault_secret_path, url, token, cacert, ttl, debug):
-    """Run as standalone program.
+def standalone(verb, vault_secret_path, url, token, cacert, ttl, overwrite,
+               debug):
+    """Manage tokens that allow access to and control over a particular
+    Vault secret path.  Verbs are 'create', 'revoke', and 'display'.
     """
-    client = AdminTool(url, token, cacert, ttl, debug)
+    client = AdminTool(url, token, cacert, ttl, overwrite, debug)
     client.execute(verb, vault_secret_path)
 
 
@@ -42,26 +50,29 @@ def strip_slashes(path):
     return path
 
 
+def strip_leading_secret(path):
+    """Strip leading 'secret/'
+    """
+    if path[:7].lower() == 'secret/':
+        path = path[7:]
+    while path[-1] == '/':
+        path = path[:-1]
+    if not path:
+        raise ValueError("A non-root secret path must be specified.")
+    return path
+
+
 class AdminTool(object):
     """Class to build and destroy token hierarchy in LSST taxonomy.
     """
 
-    def __init__(self, url, token, cacert, ttl='8766h', debug=False):
-        logger = logging.getLogger(__name__)
-        if debug:
-            logger.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        if debug:
-            ch.setLevel(logging.DEBUG)
-        formatter = TimeFormatter(
-            '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        self.logger = logger
-        if debug:
-            self.logger.debug("Debug logging started.")
+    def __init__(self, url, token, cacert, ttl='8766h', overwrite=False,
+                 debug=False):
+        self.logger = getLogger(name=__name__, debug=debug)
+        self.logger.debug("Debug logging started.")
         self.ttl = ttl
+        self.overwrite = overwrite
+        self.debug = debug
         if not url and token and cacert:
             raise ValueError("All of Vault URL, Vault Token, and Vault CA " +
                              "path must be present, either in the " +
@@ -85,13 +96,18 @@ class AdminTool(object):
         """
         verb = verb.lower()
         secret_path = strip_slashes(secret_path)
+        secret_path = strip_leading_secret(secret_path)
         if verb == 'create':
             self.create(secret_path)
             return
         if verb == 'revoke':
             self.revoke(secret_path)
             return
-        raise ValueError("Verb must be either 'create' or 'revoke'.")
+        if verb == 'display':
+            self.display(secret_path)
+            return
+        raise ValueError("Verb must be either 'create', 'revoke', or" +
+                         " 'display'.")
 
     def create(self, path):
         """Create policies and token set for path.
@@ -108,13 +124,43 @@ class AdminTool(object):
         self.delete_tokens(path)
         self.destroy_secret_policies(path)
 
+    def display(self, path):
+        """Display tokens and accessor for path in JSON format.
+        """
+        self.logger.debug("Getting tokens for '%s'." % path)
+        if path[:7].lower() == 'secret/':
+            self.logger.debug("Stripping 'secret/' from path")
+            path = path[7:]
+        token = {}
+        for pol in "read", "write", "admin":
+            token[pol] = {}
+            for item in "id", "accessor":
+                tpath = (TOKEN_SECRET_ROOT + "/" + path + "/" + pol +
+                         "/" + item)
+                token[pol][item] = self.vault_client.read(tpath)[
+                    "data"]["value"]
+        print(json.dumps(token, sort_keys=True, indent=4))
+
     def create_secret_policies(self, path):
         """Create policies for path.
         """
         self.logger.debug("Creating policies for '%s'." % path)
-        polpath = POLICY_ROOT + "/" + path
+        if self.check_policy_existence(path) and not self.overwrite:
+            self.logger.warning("Policy for path '%s' already exists." % path)
+            return
         for pol in ["read", "write", "admin"]:
-            self.create_secret_policy(polpath, pol)
+            self.create_secret_policy(path, pol)
+
+    def check_policy_existence(self, path):
+        ppath = POLICY_ROOT + "/" + path
+        self.logger.debug("Checking for existence of policy '%s'." % ppath)
+        try:
+            there = self.vault_client._sys.read_policy(ppath)
+        except InvalidPath:
+            return False
+        if there:
+            return True
+        return False
 
     def create_secret_policy(self, path, pol):
         """Create specific policy ('read', 'write', 'admin') for path.
@@ -137,28 +183,44 @@ class AdminTool(object):
         elif pol == "write":
             polstr += " path \"secret/%s/*\" {\n" % path
             polstr += "   capabilities = [\"read\", \"create\","
-            polstr += " \"update\"]\n }\n"
+            polstr += " \"update\", \"list\"]\n }\n"
         elif pol == "read":
             polstr += " path \"secret/%s/*\" {\n" % path
-            polstr += "   capabilities = [\"read\" ]\n }\n"
+            polstr += "   capabilities = [\"read\", \"list\"]\n }\n"
         self.logger.debug("Creating policy for '%s/%s'." % (path, pol))
+        ppath = POLICY_ROOT + "/" + path + "/" + pol
         self.logger.debug("Policy string: %s" % polstr)
-        self.vault_client._sys.create_or_update_policy(path + "/" + pol,
-                                                       polstr)
+        self.logger.debug("Policy path: %s" % ppath)
+        self.vault_client._sys.create_or_update_policy(ppath, polstr)
 
     def destroy_secret_policies(self, path):
         """Destroy policies for secret path.
         """
         polpath = POLICY_ROOT + "/" + path
         for pol in ["admin", "read", "write"]:
-            self.logger.debug("Deleting policy for %s/%s." % (path, pol))
-            self.vault_client._sys.delete_policy(polpath + "/" + pol)
+            ppath = polpath + "/" + pol
+            self.logger.debug("Deleting policy for '%s'." % ppath)
+            self.vault_client._sys.delete_policy(ppath)
 
     def create_tokens(self, path):
         """Create set of tokens for path.
         """
+        if self.check_token_existence(path):
+            self.logger.warning("Tokens for path '%s' already exist." % path)
+            if not self.overwrite:
+                self.logger.warning("Not overwriting.")
+                return
+            self.logger.warning(
+                "Revoking existing tokens for path '%s'." % path)
+            self.revoke(path)
         admin_tok = self.create_admin_token(path)
         self.create_rw_tokens(admin_tok, path)
+
+    def check_token_existence(self, path):
+        there = self.vault_client.list(TOKEN_SECRET_ROOT + "/" + path)
+        if there:
+            return True
+        return False
 
     def create_admin_token(self, path):
         """Create admin token for path.
@@ -214,7 +276,7 @@ class AdminTool(object):
         roles = ["read", "write", "admin"]
         if role not in roles:
             raise ValueError("Role must be one of %r" % roles)
-        toksec = SECRET_ROOT + "/" + path + "/" + role
+        toksec = TOKEN_SECRET_ROOT + "/" + path + "/" + role
         self.logger.debug("Writing token store for '%s/%s'." % (path, role))
         self.vault_client.write(toksec + "/id",
                                 value=tok_id)
@@ -224,23 +286,25 @@ class AdminTool(object):
     def delete_tokens(self, path):
         """Revoke tokens for path and remove token id store.
         """
-        tok_store = SECRET_ROOT + "/" + path
+        tok_store = TOKEN_SECRET_ROOT + "/" + path
         for role in ["read", "write", "admin"]:
             this_tok = tok_store + "/" + role
             id_secpath = this_tok + "/id"
             self.logger.debug("Requesting ID for '%s' token for '%s'." % (
                 role, path))
-            token = self.vault_client.read(id_secpath)["data"]["value"]
+            tokendata = self.vault_client.read(id_secpath)
+            if tokendata:
+                token = tokendata["data"]["value"]
+            else:
+                self.logger.warning(
+                    "Cannot find token ID for '%s'." % this_tok)
+                continue
             self.logger.debug("Deleting '%s' token for '%s'." % (
                 role, path))
             self.vault_client.revoke_token(token=token)
-            self.logger.debug("Deleting token store for '%s/%s'." % (
-                path, role))
-            self.vault_client.delete(id_secpath)
-            self.vault_client.delete(this_tok + "/accessor")
-            self.vault_client.delete(this_tok)
         self.logger.debug("Deleting token store for '%s'." % path)
-        self.vault_client.delete(tok_store)
+        dc = RecursiveDeleter(self.url, self.token, self.cacert, self.debug)
+        dc.recursive_delete(tok_store)
 
 
 if __name__ == '__main__':

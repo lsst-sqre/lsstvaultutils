@@ -2,10 +2,9 @@
 """RecursiveDeleter removes an entire secret tree from Vault.
 """
 
-import logging
 import click
 import hvac
-from .timeformatter import TimeFormatter
+from .timeformatter import getLogger
 
 
 @click.command()
@@ -20,6 +19,9 @@ from .timeformatter import TimeFormatter
               help="Enable debugging.")
 def standalone(vault_secret_path, url, token, cacert, debug):
     client = RecursiveDeleter(url, token, cacert, debug)
+    if vault_secret_path[:7].lower() != "secret/":
+        client.logger.debug("Adding 'secret/' to front of path.")
+        vault_secret_path = "secret/" + vault_secret_path
     client.recursive_delete(vault_secret_path)
 
 
@@ -28,20 +30,8 @@ class RecursiveDeleter(object):
     """
 
     def __init__(self, url, token, cacert, debug):
-        logger = logging.getLogger(__name__)
-        if debug:
-            logger.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        if debug:
-            ch.setLevel(logging.DEBUG)
-        formatter = TimeFormatter(
-            '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        self.logger = logger
-        if debug:
-            self.logger.debug("Debug logging started.")
+        self.logger = getLogger(name=__name__, debug=debug)
+        self.logger.debug("Debug logging started.")
         if not url and token and cacert:
             raise ValueError("All of Vault URL, Vault Token, and Vault CA " +
                              "path must be present, either in the " +
@@ -57,10 +47,15 @@ class RecursiveDeleter(object):
         return client
 
     def recursive_delete(self, path):
-        """Delete path and everything under it.
+        """Delete secret path and everything under it.
         """
+        if path[:7].lower() != "secret/":
+            raise ValueError("Path to delete must begin with 'secret/'.")
         self.logger.debug("Removing '%s' recursively." % path)
         pkeys = []
+        # strip trailing slash
+        if path[:-1] == '/':
+            path = path[:-1]
         resp = self.vault_client.list(path)
         if resp:
             self.logger.debug("Removing tree rooted at '%s'" % path)

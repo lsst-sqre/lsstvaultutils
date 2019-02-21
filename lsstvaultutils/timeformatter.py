@@ -19,3 +19,20 @@ class TimeFormatter(logging.Formatter):
             t = time.strftime("%Y-%m-%d %H:%M:%S", ct)
             s = "%s,%03d" % (t, record.msecs)
         return s
+
+
+def getLogger(name=__name__, debug=False):
+    """Convenience function to return configured logger with milliseconds.
+    """
+    logger = logging.getLogger(name)
+    if debug:
+        logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    if debug:
+        ch.setLevel(logging.DEBUG)
+    formatter = TimeFormatter(
+        '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    return logger

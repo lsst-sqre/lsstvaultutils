@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-"""VaultHelper aids migration from k8s secrets to Vault.
+"""SecretCopier aids migration between Vault and Kubernetes secrets.
 """
 
-import logging
 import click
 import hvac
 from base64 import b64decode, b64encode
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
-from .timeformatter import TimeFormatter
+from .timeformatter import getLogger
 
 
 @click.command()
@@ -54,20 +53,8 @@ class SecretCopier(object):
     """
 
     def __init__(self, url, token, cacert, debug=False):
-        logger = logging.getLogger(__name__)
-        if debug:
-            logger.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        if debug:
-            ch.setLevel(logging.DEBUG)
-        formatter = TimeFormatter(
-            '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        self.logger = logger
-        if debug:
-            self.logger.debug("Debug logging started.")
+        self.logger = getLogger(name=__name__, debug=debug)
+        self.logger.debug("Debug logging started.")
         if not url and token and cacert:
             raise ValueError("All of Vault URL, Vault Token, and Vault CA " +
                              "path must be present, either in the " +
@@ -77,6 +64,12 @@ class SecretCopier(object):
         self.current_context = config.list_kube_config_contexts()[1]
         self.namespace = self.current_context['context']['namespace']
         self.secret = {}
+
+    def canonicalize_secret_path(self, path):
+        if path[:7].lower() != 'secret/':
+            self.logger.debug("Adding 'secret/' to front of path.")
+            path = 'secret/' + path
+        return path
 
     def get_vault_client(self, url, token, cacert):
         """Acquire a Vault client.
@@ -132,6 +125,7 @@ class SecretCopier(object):
     def copy_k8s_to_vault(self, k8s_secret_name, vault_secret_path):
         """Copy secret from Kubernetes to Vault.
         """
+        vault_secret_path = self.canonicalize_secret_path(vault_secret_path)
         self.read_k8s_secret(k8s_secret_name)
         self.write_vault_secret(vault_secret_path)
 
@@ -198,6 +192,7 @@ class SecretCopier(object):
     def copy_vault_to_k8s(self, vault_secret_path, k8s_secret_name):
         """Copy a secret from Vault to Kubernetes.
         """
+        vault_secret_path = self.canonicalize_secret_path(vault_secret_path)
         self.read_vault_secret(vault_secret_path)
         self.write_k8s_secret(k8s_secret_name)
 
