@@ -275,8 +275,8 @@ Copy the secret to a new Vault path:
 
     (vaultutils) adam@ixitxachitl:/tmp$ copyk2v testg1 secret/dm/square/test/copy1
 
-Read a value (we _could_ switch to the Vault read token, but we don't
-have to--write is also allowed to read) back:
+Read a value (we _could_ switch to the Vault `read` token, but we don't
+have to--`write` is also allowed to read) back:
 
     (vaultutils) adam@ixitxachitl:/tmp$ vault read secret/dm/square/test/copy1/foo
     {
