@@ -54,7 +54,7 @@ class RecursiveDeleter(object):
         self.logger.debug("Removing '%s' recursively." % path)
         pkeys = []
         # strip trailing slash
-        if path[:-1] == '/':
+        while path[-1] == '/':
             path = path[:-1]
         resp = self.vault_client.list(path)
         if resp:
