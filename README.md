@@ -220,9 +220,9 @@ Read one back:
 Now let's create Kubernetes secrets from these.  Do whatever you need to
 do in order to get a current authenticated Kubernetes context.
 
-Switch to the "read" token--we don't need to use a write token to copy
-from Vault to Kubernetes, as long as our Kubernetes user can create
-secrets.
+Switch to the `read` token--we don't need to use a `write` token to copy
+from Vault to Kubernetes.  The Kubernetes user must be able to create
+secrets, of course, but that's got nothing to do with Vault tokens.
 
 `export VAULT_TOKEN="s.6JQ0zz6w6atlD1kcgisru3tY"`
 
@@ -403,12 +403,12 @@ will clean up the data we inserted into vault as well.
     2019-02-21 14:10:46.212 MST(-0700) [DEBUG] lsstvaultutils.tokenadmin | Deleting policy for 'delegated/dm/square/test/read'.
     2019-02-21 14:10:46.439 MST(-0700) [DEBUG] lsstvaultutils.tokenadmin | Deleting policy for 'delegated/dm/square/test/write'.
 
-And now the system is back in the state we started from.
+And now the system is back in the state in which we started.
 
 ### Verifying token deletion
 
 We can try an operation to see that the tokens have been revoked.  Set
-up the (revoked) read token: `export
+up the (now-revoked) read token: `export
 VAULT_TOKEN="s.6JQ0zz6w6atlD1kcgisru3tY"`.  Then try the same read we
 previously ran again:
 
