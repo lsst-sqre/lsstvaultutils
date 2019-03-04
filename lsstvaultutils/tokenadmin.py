@@ -13,7 +13,7 @@ from .recursivedeleter import RecursiveDeleter
 from .timeformatter import getLogger
 
 POLICY_ROOT = "delegated"
-TOKEN_SECRET_ROOT = "secret/delegated"
+TOKEN_ROOT = "delegated"
 
 
 @click.command()
@@ -132,14 +132,17 @@ class AdminTool(object):
         self.logger.debug("Revoking tokens and removing policies for" +
                           " '%s'." % path)
         if self.delete_data:
-            token_path = (TOKEN_SECRET_ROOT + "/" + path + "/admin/id")
-            self.logger.debug("Getting admin token for '%s'." % path)
-            token_id = self.vault_client.read(token_path)["data"]["value"]
+            token_path = (TOKEN_ROOT + "/" + path + "/write/id")
+            self.logger.debug("Getting write token for '%s'." % path)
+            self.logger.debug("Reading value from '%s'." % token_path)
+            dt = self.vault_client.secrets.kv.v2.read_secret_version(
+                path=token_path)
+            self.logger.debug("Got data: %r" % dt)
+            token_id = dt["data"]["data"]["value"]
             dc = RecursiveDeleter(self.url, token_id, self.cacert,
                                   self.debug)
-            dpath = "secret/" + path
-            self.logger.debug("Deleting data under '%s'." % dpath)
-            dc.recursive_delete(dpath)
+            self.logger.debug("Deleting data under '%s'." % path)
+            dc.recursive_delete(path)
         self.delete_tokens(path)
         self.destroy_secret_policies(path)
 
@@ -148,13 +151,13 @@ class AdminTool(object):
         """
         self.logger.debug("Getting tokens for '%s'." % path)
         token = {}
-        for pol in "read", "write", "admin":
+        for pol in "read", "write":
             token[pol] = {}
             for item in "id", "accessor":
-                tpath = (TOKEN_SECRET_ROOT + "/" + path + "/" + pol +
-                         "/" + item)
-                token[pol][item] = self.vault_client.read(tpath)[
-                    "data"]["value"]
+                tpath = (TOKEN_ROOT + "/" + path + "/" + pol + "/" + item)
+                v = self.vault_client.secrets.kv.v2.read_secret_version(
+                    path=tpath)
+                token[pol][item] = v["data"]["data"]["value"]
         displayval = {}
         displayval[path] = token
         print(json.dumps(displayval, sort_keys=True, indent=4))
@@ -166,7 +169,7 @@ class AdminTool(object):
         if self.check_policy_existence(path) and not self.overwrite:
             self.logger.warning("Policy for path '%s' already exists." % path)
             return
-        for pol in ["read", "write", "admin"]:
+        for pol in ["read", "write"]:
             self.create_secret_policy(path, pol)
 
     def check_policy_existence(self, path):
@@ -181,30 +184,36 @@ class AdminTool(object):
         return False
 
     def create_secret_policy(self, path, pol):
-        """Create specific policy ('read', 'write', 'admin') for path.
+        """Create specific policy ('read', 'write') for path.
         """
-        pols = ["read", "write", "admin"]
+        pols = ["read", "write"]
         polstr = ""
         if pol not in pols:
             raise ValueError("Policy must be one of %r" % pols)
-        if pol == "admin":
-            for sub in ["", "/*"]:
-                if sub:
-                    polstr += "\n"
-                polstr += " path \"secret/%s%s\" {\n" % (path, sub)
-                polstr += "   capabilities = [\"create\", \"read\","
-                polstr += "  \"update\", \"delete\", \"list\"]\n }\n"
-            # This policy lets it delete ALL the tokens, not just children
-            #  polstr += " path \"auth/token/*\" {\n"
-            #  polstr += "   capabilities = [\"create\", \"read\","
-            #  polstr += "  \"update\", \"delete\", \"list\"]\n }\n"
-        elif pol == "write":
-            polstr += " path \"secret/%s/*\" {\n" % path
+        if pol == "write":
+            polstr += " path \"secret/data/%s\" {\n" % path
             polstr += "   capabilities = [\"read\", \"create\","
-            polstr += " \"update\", \"list\"]\n }\n"
+            polstr += " \"update\", \"delete\"]\n }\n"
+            polstr += " path \"secret/data/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"read\", \"create\","
+            polstr += " \"update\", \"delete\"]\n }\n"
+            polstr += " path \"secret/metadata/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"list\", \"read\","
+            polstr += " \"update\",\"delete\"]\n }\n"
+            polstr += " path \"secret/metadata/%s\" {\n" % path
+            polstr += "   capabilities = [\"list\", \"read\","
+            polstr += " \"update\",\"delete\"]\n }\n"
+            polstr += " path \"secret/delete/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"update\"]\n }\n"
+            polstr += " path \"secret/undelete/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"update\"]\n }\n"
+            polstr += " path \"secret/destroy/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"update\"]\n }\n"
         elif pol == "read":
-            polstr += " path \"secret/%s/*\" {\n" % path
-            polstr += "   capabilities = [\"read\", \"list\"]\n }\n"
+            polstr += " path \"secret/data/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"read\"]\n }\n"
+            polstr += " path \"secret/metadata/%s/*\" {\n" % path
+            polstr += "   capabilities = [\"read\",\"list\"]\n }\n"
         self.logger.debug("Creating policy for '%s/%s'." % (path, pol))
         ppath = POLICY_ROOT + "/" + path + "/" + pol
         self.logger.debug("Policy string: %s" % polstr)
@@ -215,7 +224,7 @@ class AdminTool(object):
         """Destroy policies for secret path.
         """
         polpath = POLICY_ROOT + "/" + path
-        for pol in ["admin", "read", "write"]:
+        for pol in ["read", "write"]:
             ppath = polpath + "/" + pol
             self.logger.debug("Deleting policy for '%s'." % ppath)
             self.vault_client._sys.delete_policy(ppath)
@@ -231,50 +240,18 @@ class AdminTool(object):
             self.logger.warning(
                 "Revoking existing tokens for path '%s'." % path)
             self.revoke(path)
-        admin_tok = self.create_admin_token(path)
-        self.create_rw_tokens(admin_tok, path)
+        self.create_rw_tokens(path)
 
     def check_token_existence(self, path):
-        there = self.vault_client.list(TOKEN_SECRET_ROOT + "/" + path)
+        there = self.vault_client.list(
+            "secret/metadata/" + TOKEN_ROOT + "/" + path)
         if there:
             return True
         return False
 
-    def create_admin_token(self, path):
-        """Create admin token for path.
+    def create_rw_tokens(self, path):
+        """Create read and write tokens for path.
         """
-        # Admin token needs all three policies because child tokens must
-        #  have subset of parent policies (not parent policy content), even
-        #  though the admin policy is a strict superset of both read and
-        #  write policies.
-        #
-        # Since we're not creating the read/write tokens as children of the
-        #  admin, it doesn't really matter.
-        policies = [(POLICY_ROOT + "/" + path + "/" + x) for x in
-                    ["read", "write", "admin"]]
-        self.logger.debug("Creating 'admin' token for '%s'." % path)
-        self.logger.debug(" - with policies '%r'." % policies)
-        resp = self.vault_client.create_token(ttl=self.ttl,
-                                              policies=policies)
-        auth = resp.get("auth")
-        tok = auth.get("client_token")
-        resp = self.vault_client.lookup_token(token=tok)
-        tok_id = resp["data"]["id"]
-        accessor = resp["data"]["accessor"]
-        self.store_token(tok_id, accessor, "admin", path)
-        return tok_id
-
-    def create_rw_tokens(self, admin_tok, path):
-        """Create read and write tokens for path, using admin token as parent.
-        """
-        # Create using admin token as parent token
-        # client = hvac.Client(url=self.url, verify=self.cacert,
-        #                     token=admin_tok)
-        # assert client.is_authenticated()
-        # That works, but if we have the policy set to allow token manipulation
-        #  we can delete all tokens.  We need to set roles.
-        #
-        # For now, we just use the admin client we were starting with.
         client = self.vault_client
         for role in ["read", "write"]:
             policies = [(POLICY_ROOT + "/" + path + "/" + role)]
@@ -291,28 +268,33 @@ class AdminTool(object):
     def store_token(self, tok_id, accessor, role, path):
         """Store token id and accessor for path/role combo.
         """
-        roles = ["read", "write", "admin"]
+        roles = ["read", "write"]
         if role not in roles:
             raise ValueError("Role must be one of %r" % roles)
-        toksec = TOKEN_SECRET_ROOT + "/" + path + "/" + role
+        toksec = TOKEN_ROOT + "/" + path + "/" + role
         self.logger.debug("Writing token store for '%s/%s'." % (path, role))
-        self.vault_client.write(toksec + "/id",
-                                value=tok_id)
-        self.vault_client.write(toksec + "/accessor",
-                                value=accessor)
+        self.logger.debug(" '%s' -> '%s'." % (toksec, tok_id))
+        self.vault_client.secrets.kv.v2.create_or_update_secret(
+            path=toksec + "/id",
+            secret={"value": tok_id})
+        self.vault_client.secrets.kv.v2.create_or_update_secret(
+            path=toksec + "/accessor",
+            secret={"value": accessor})
 
     def delete_tokens(self, path):
         """Revoke tokens for path and remove token id store.
         """
-        tok_store = TOKEN_SECRET_ROOT + "/" + path
-        for role in ["read", "write", "admin"]:
+        tok_store = TOKEN_ROOT + "/" + path
+        for role in ["read", "write"]:
             this_tok = tok_store + "/" + role
             id_secpath = this_tok + "/id"
             self.logger.debug("Requesting ID for '%s' token for '%s'." % (
                 role, path))
-            tokendata = self.vault_client.read(id_secpath)
+            tokendata = self.vault_client.secrets.kv.v2.read_secret_version(
+                id_secpath)
             if tokendata:
-                token = tokendata["data"]["value"]
+                self.logger.debug("Tokendata: %r" % tokendata)
+                token = tokendata["data"]["data"]["value"]
             else:
                 self.logger.warning(
                     "Cannot find token ID for '%s'." % this_tok)
@@ -322,6 +304,7 @@ class AdminTool(object):
             self.vault_client.revoke_token(token=token)
         self.logger.debug("Deleting token store for '%s'." % path)
         dc = RecursiveDeleter(self.url, self.token, self.cacert, self.debug)
+        self.logger.debug("Recursive delete of: '%s'" % tok_store)
         dc.recursive_delete(tok_store)
 
 

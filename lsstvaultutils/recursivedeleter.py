@@ -8,7 +8,7 @@ from .timeformatter import getLogger
 
 
 @click.command()
-@click.argument('vault_secret_path')
+@click.argument('vault_path')
 @click.option('--url', envvar='VAULT_ADDR',
               help="URL of Vault endpoint.")
 @click.option('--token', envvar='VAULT_TOKEN',
@@ -17,12 +17,12 @@ from .timeformatter import getLogger
               help="Path to Vault CA certificate.")
 @click.option('--debug', envvar='DEBUG', is_flag=True,
               help="Enable debugging.")
-def standalone(vault_secret_path, url, token, cacert, debug):
+def standalone(vault_path, url, token, cacert, debug):
     client = RecursiveDeleter(url, token, cacert, debug)
-    if vault_secret_path[:7].lower() != "secret/":
-        client.logger.debug("Adding 'secret/' to front of path.")
-        vault_secret_path = "secret/" + vault_secret_path
-    client.recursive_delete(vault_secret_path)
+    if vault_path[:7].lower() == "secret/":
+        client.logger.debug("Removing 'secret/' from front of path.")
+        vault_path = vault_path[7:]
+    client.recursive_delete(vault_path)
 
 
 class RecursiveDeleter(object):
@@ -49,22 +49,29 @@ class RecursiveDeleter(object):
     def recursive_delete(self, path):
         """Delete secret path and everything under it.
         """
-        if path[:7].lower() != "secret/":
-            raise ValueError("Path to delete must begin with 'secret/'.")
-        self.logger.debug("Removing '%s' recursively." % path)
-        pkeys = []
-        # strip trailing slash
+        # strip leading and trailing slashes
+        while path[:1] == '/':
+            path = path[1:]
         while path[-1] == '/':
             path = path[:-1]
-        resp = self.vault_client.list(path)
-        if resp:
-            self.logger.debug("Removing tree rooted at '%s'" % path)
-            pkeys = resp["data"]["keys"]
-            for item in [(path + "/" + x) for x in pkeys]:
-                self.recursive_delete(item)
-        else:
-            self.logger.debug("Removing '%s' as leaf node." % path)
-            self.vault_client.delete(path)
+        self.logger.debug("Removing '%s' recursively." % path)
+        pkeys = []
+        try:
+            resp = self.vault_client.secrets.kv.v2.list_secrets(path)
+            if resp:
+                self.logger.debug("Removing tree rooted at '%s'" % path)
+                self.logger.debug("resp = '%r'" % resp)
+                pkeys = resp["data"]["keys"]
+                for item in [(path + "/" + x) for x in pkeys]:
+                    self.recursive_delete(item)
+        except hvac.exceptions.InvalidPath:
+            # We get this if it is a leaf node
+            # self.logger.debug("InvalidPath '%s'." % path)
+            pass
+        self.logger.debug("Removing '%s' as leaf node." % path)
+        self.logger.debug("Using token '%s'." % self.vault_client.token)
+        self.vault_client.secrets.kv.v2.delete_metadata_and_all_versions(
+            path=path)
 
 
 if __name__ == '__main__':
