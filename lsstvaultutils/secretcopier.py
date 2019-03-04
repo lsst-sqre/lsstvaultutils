@@ -66,9 +66,9 @@ class SecretCopier(object):
         self.secret = {}
 
     def canonicalize_secret_path(self, path):
-        if path[:7].lower() != 'secret/':
-            self.logger.debug("Adding 'secret/' to front of path.")
-            path = 'secret/' + path
+        if path[:7].lower() == 'secret/':
+            self.logger.debug("Removing 'secret/' from front of path.")
+            path = path[7:]
         return path
 
     def get_vault_client(self, url, token, cacert):
@@ -120,7 +120,8 @@ class SecretCopier(object):
         for k in self.secret:
             spath = vault_secret_path + "/" + k
             self.logger.debug("Writing secret to '%s'." % spath)
-            self.vault_client.write(spath, value=self.secret[k])
+            self.vault_client.secrets.kv.v2.create_or_update_secret(
+                spath, secret={"value": self.secret[k]})
 
     def copy_k8s_to_vault(self, k8s_secret_name, vault_secret_path):
         """Copy secret from Kubernetes to Vault.
@@ -137,20 +138,21 @@ class SecretCopier(object):
         pathcomps = path.split('/')
         basepath = '/'.join(pathcomps[:-1])
         lastcomp = pathcomps[-1]
-        vkeys = self.vault_client.list(basepath)["data"]["keys"]
+        v2c = self.vault_client.secrets.kv.v2
+        vkeys = v2c.list_secrets(basepath)["data"]["keys"]
         valdata = {}
         if lastcomp in vkeys:
             # It will end with a "/" if it's a directory, but not if
             #  it is a simple value
             self.logger.debug("'%s' is a single value." % vault_secret_path)
-            value = self.vault_client.read(vault_secret_path)["data"]["value"]
+            value = v2c.read_secret_version(["data"]["data"]["value"])
             valdata = {lastcomp: value}
         elif (lastcomp + "/") in vkeys:
             self.logger.debug("'%s' is a set of values." % vault_secret_path)
-            vkeys = self.vault_client.list(vault_secret_path)["data"]["keys"]
+            vkeys = v2c.list_secrets(vault_secret_path)["data"]["keys"]
             for k in vkeys:
-                valdata[k] = self.vault_client.read(
-                    vault_secret_path + "/" + k)["data"]["value"]
+                valdata[k] = v2c.read_secret_version(
+                    vault_secret_path + "/" + k)["data"]["data"]["value"]
         self.secret = valdata
 
     def write_k8s_secret(self, k8s_secret_name):
