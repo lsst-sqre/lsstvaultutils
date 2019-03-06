@@ -16,10 +16,10 @@ under `secret` as follows:
 
 As an example, secrets for the `jupyterlabdemo.lsst.codes` instance of
 the LSST Science Platform Notebook Aspect are stored in
-`secret/dm/square/jellybean/jupyterlabdemo.lsst.codes`.  Underneath that
+`secret/dm/square/nublado/jupyterlabdemo.lsst.codes`.  Underneath that
 there are `hub`, `proxy`, and `tls` secret folders, each of which has a
 number of individual secrets,
-e.g. `secret/dm/square/jellybean/jupyterlabdemo.lsst.codes/hub/oauth_secret`.
+e.g. `secret/dm/square/nublado/jupyterlabdemo.lsst.codes/hub/oauth_secret`.
 
 Note that these secrets are *not* accessible to the administrative user
 that created the token pair and policies.  They are accessed through one
