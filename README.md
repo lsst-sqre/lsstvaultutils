@@ -14,12 +14,12 @@ under `secret` as follows:
 
 `secret/:subsystem:/:team:/:category:/:instance:`
 
-As an example, secrets for the `jupyterlabdemo.lsst.codes` instance of
+As an example, secrets for the `nublado.lsst.codes` instance of
 the LSST Science Platform Notebook Aspect are stored in
-`secret/dm/square/nublado/jupyterlabdemo.lsst.codes`.  Underneath that
+`secret/dm/square/nublado/nublado.lsst.codes`.  Underneath that
 there are `hub`, `proxy`, and `tls` secret folders, each of which has a
 number of individual secrets,
-e.g. `secret/dm/square/nublado/jupyterlabdemo.lsst.codes/hub/oauth_secret`.
+e.g. `secret/dm/square/nublado/nublado.lsst.codes/hub/oauth_secret`.
 
 Note that these secrets are *not* accessible to the administrative user
 that created the token pair and policies.  They are accessed through one
@@ -280,7 +280,7 @@ Then we'll copy a set of secrets from Vault to Kubernetes:
     2019-03-04 14:54:53.117 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Acquiring k8s client.
     2019-03-04 14:54:53.249 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Reading secret from 'dm/test/group1'.
     2019-03-04 14:54:53.378 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | 'dm/test/group1' is a set of values.
-    2019-03-04 14:54:53.692 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Determining whether secret 'testg1'exists in namespace 'jupyterlabdemo'.
+    2019-03-04 14:54:53.692 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Determining whether secret 'testg1'exists in namespace 'nublado'.
     2019-03-04 14:54:53.971 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Secret found.
     2019-03-04 14:54:53.971 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Base64-encoding secret data
     2019-03-04 14:54:53.971 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Updating secret.
@@ -300,9 +300,9 @@ Now let's see if the copy worked.
     metadata:
       creationTimestamp: 2019-03-04T21:55:47Z
       name: testg2
-      namespace: jupyterlabdemo
+      namespace: nublado
       resourceVersion: "10389477"
-      selfLink: /api/v1/namespaces/jupyterlabdemo/secrets/testg2
+      selfLink: /api/v1/namespaces/nublado/secrets/testg2
       uid: 445509ca-3ec8-11e9-a1ce-42010a800032
     type: Opaque
 
