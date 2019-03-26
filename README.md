@@ -32,11 +32,19 @@ multiple key-value pairs) much easier.
 
 ### Tokens
 
+The first thing to do, with an administrative token, is to create a
+delegator token which will be the token used to run the Vault token
+provisioning tools.  Use [delegator.hcl](delegator.hcl) as the input to
+create a policy for this.  Then create a token with that new delegator
+policy attached.
+
 Token IDs and accessors are stored under
 `secret/delegated/:subsystem:/:team:/:category:/:instance:/:role:/:type:`
 where `role` is one of `read` or `write` and `type` is one of `id` or
 `accessor`.  These secrets are only accessible to an administrative user
-(such as the one that created the token pair in the first place).
+(such as the one that created the token pair in the first place, which
+should be the token attached to the `delegator` policy created
+above).
 
 There are two tokens for each path, comprising the "token pair".  These
 are `read` and `write`.
