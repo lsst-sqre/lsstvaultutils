@@ -5,15 +5,15 @@ import os
 import codecs
 from setuptools import setup, find_packages
 
-PACKAGENAME = 'lsstvaultutils'
-DESCRIPTION = 'LSST SQuaRE Vault utilities'
-AUTHOR = 'Adam Thornton'
-AUTHOR_EMAIL = 'athornton@lsst.org'
-URL = 'https://github.com/lsst-sqre/lsstvaultutils'
-LICENSE = 'MIT'
+PACKAGENAME = "lsstvaultutils"
+DESCRIPTION = "LSST SQuaRE Vault utilities"
+AUTHOR = "Adam Thornton"
+AUTHOR_EMAIL = "athornton@lsst.org"
+URL = "https://github.com/lsst-sqre/lsstvaultutils"
+LICENSE = "MIT"
 
 
-def get_version(file, name='__version__'):
+def get_version(file, name="__version__"):
     """Get the version of the package from the given file by
     executing it and extracting the given `name`.
     """
@@ -27,12 +27,12 @@ def get_version(file, name='__version__'):
 def local_read(filename):
     """Convenience function for includes"""
     full_filename = os.path.join(
-        os.path.abspath(os.path.dirname(__file__)),
-        filename)
-    return codecs.open(full_filename, 'r', 'utf-8').read()
+        os.path.abspath(os.path.dirname(__file__)), filename
+    )
+    return codecs.open(full_filename, "r", "utf-8").read()
 
 
-long_description = local_read('README.md')
+long_description = local_read("README.md")
 
 
 setup(
@@ -45,24 +45,21 @@ setup(
     author_email=AUTHOR_EMAIL,
     license=LICENSE,
     classifiers=[
-        'Development Status :: 4 - Beta',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
-        'License :: OSI Approved :: MIT License',
+        "Development Status :: 4 - Beta",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.5",
+        "License :: OSI Approved :: MIT License",
     ],
-    keywords='lsst',
-    packages=find_packages(exclude=['docs', 'tests*']),
-    install_requires=[
-        'hvac<1.0.0',
-        'kubernetes<10.0.0',
-        'click<8.0.0'
-    ],
+    keywords="lsst",
+    packages=find_packages(exclude=["docs", "tests*"]),
+    install_requires=["hvac", "kubernetes", "click"],
     entry_points={
-        'console_scripts': [
-            'copyk2v = lsstvaultutils.secretcopier:standalonek2v',
-            'copyv2k = lsstvaultutils.secretcopier:standalonev2k',
-            'tokenadmin = lsstvaultutils.tokenadmin:standalone',
-            'vaultrmrf = lsstvaultutils.recursivedeleter:standalone'
+        "console_scripts": [
+            "copyk2v = lsstvaultutils.secretcopier:standalonek2v",
+            "copyv2k = lsstvaultutils.secretcopier:standalonev2k",
+            "tokenadmin = lsstvaultutils.tokenadmin:standalone",
+            "vaultrmrf = lsstvaultutils.recursivedeleter:standalone",
+            "multisecret = lsstvaultutils.multisecret:standalone",
         ]
     },
 )

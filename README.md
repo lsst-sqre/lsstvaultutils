@@ -9,6 +9,17 @@ detailed below.
 
 ### Secrets
 
+The primary use case for the LSST vault has been to act as a repository
+for Kubernetes secrets.  Those are organized as follows:
+
+`secret/k8s_operator/:instance:`
+
+These secrets are typically created and injected at cluster creation
+time; in the case of the LSP deployment, this is scripted.
+
+The secondary, more flexible, use case is to use the LSST vault as a
+generalized key-value store.
+
 The current plan is for the LSST vault to be organized with secrets
 under `secret` as follows:
 
