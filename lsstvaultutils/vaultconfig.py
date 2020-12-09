@@ -40,11 +40,6 @@ class VaultConfig:
 
     """
 
-    vault_address: str = os.getenv("VAULT_ADDR")
-    secret: Optional[Dict[str, str]] = None
-    enclaves: Dict[str, Enclave] = field(default_factory=dict)
-    skip_list: List[str] = field(default_factory=list)
-
     def __init__(
         self,
         vault_address: Optional[str],
@@ -52,13 +47,17 @@ class VaultConfig:
         skip_list: Optional[List[str]],
         secret_file: Optional[str] = None,
     ):
+        self.vault_address: str = os.getenv("VAULT_ADDR")
+        self.secret: Optional[Dict[str, str]] = None
+        self.enclaves: Dict[str, Enclave] = {}
+        self.skip_list: List[str] = []
         if vault_address:
             self.vault_address = vault_address
         if secret_file:
             self.load_secret(secret_file)
+
         with open(vault_file, "r") as f:
             vault_dict = json.load(f)
-        self.enclaves = {}
         for item in vault_dict:
             name = list(item.keys())[0]
             if name in skip_list:
