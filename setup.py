@@ -53,16 +53,17 @@ setup(
     keywords='lsst',
     packages=find_packages(exclude=['docs', 'tests*']),
     install_requires=[
-        'hvac<1.0.0',
-        'kubernetes<10.0.0',
-        'click<8.0.0'
+        'hvac',
+        'kubernetes',
+        'click'
     ],
     entry_points={
         'console_scripts': [
             'copyk2v = lsstvaultutils.secretcopier:standalonek2v',
             'copyv2k = lsstvaultutils.secretcopier:standalonev2k',
             'tokenadmin = lsstvaultutils.tokenadmin:standalone',
-            'vaultrmrf = lsstvaultutils.recursivedeleter:standalone'
+            'vaultrmrf = lsstvaultutils.recursivedeleter:standalone',
+            'multisecret = lsstvaultutils.multisecret:standalone'
         ]
     },
 )
