@@ -12,8 +12,9 @@ from .vaultconfig import VaultConfig
 @click.option("--omit", "-o", multiple=True)
 @click.option("--dry-run", "-x", is_flag=True)
 @click.pass_context
-def standalone(ctx, vault_address, secret_name, secret_file, vault_file, omit,
-               dry_run):
+def standalone(
+    ctx, vault_address, secret_name, secret_file, vault_file, omit, dry_run
+):
     """A tool to manipulate secrets in the same relative location across
     vault enclaves.
 
@@ -49,12 +50,14 @@ def standalone(ctx, vault_address, secret_name, secret_file, vault_file, omit,
 
     """
     ctx.ensure_object(dict)
-    ctx.obj['vault_config'] = VaultConfig(vault_address=vault_address,
-                                          vault_file=vault_file,
-                                          skip_list=omit)
-    ctx.obj['options'] = {'secret_name': secret_name,
-                          'dry_run': dry_run,
-                          'secret_file': secret_file}
+    ctx.obj["vault_config"] = VaultConfig(
+        vault_address=vault_address, vault_file=vault_file, skip_list=omit
+    )
+    ctx.obj["options"] = {
+        "secret_name": secret_name,
+        "dry_run": dry_run,
+        "secret_file": secret_file,
+    }
 
 
 @standalone.command()
@@ -67,14 +70,13 @@ def add(ctx):
     the secret you want to inject, as a single object with key-value pairs,
     each pair being the name of the item within the secret and its value.
     """
-    vc = ctx.obj['vault_config']
-    sf = ctx.obj['options']['secret_file']
+    vc = ctx.obj["vault_config"]
+    sf = ctx.obj["options"]["secret_file"]
     if not sf:
         raise RuntimeError("Command 'add' requires '--secret-file'")
     vc.load_secret(sf)
-    opts = ctx.obj['options']
-    vc.add_secrets(secret_name=opts['secret_name'],
-                   dry_run=opts['dry_run'])
+    opts = ctx.obj["options"]
+    vc.add_secrets(secret_name=opts["secret_name"], dry_run=opts["dry_run"])
 
 
 @standalone.command()
@@ -83,7 +85,6 @@ def remove(ctx):
     """
     Remove a secret from multiple enclaves.
     """
-    vc = ctx.obj['vault_config']
-    opts = ctx.obj['options']
-    vc.remove_secrets(secret_name=opts['secret_name'],
-                      dry_run=opts['dry_run'])
+    vc = ctx.obj["vault_config"]
+    opts = ctx.obj["options"]
+    vc.remove_secrets(secret_name=opts["secret_name"], dry_run=opts["dry_run"])

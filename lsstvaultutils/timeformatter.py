@@ -22,8 +22,7 @@ class TimeFormatter(logging.Formatter):
 
 
 def getLogger(name=__name__, debug=False):
-    """Convenience function to return configured logger with milliseconds.
-    """
+    """Convenience function to return configured logger with milliseconds."""
     logger = logging.getLogger(name)
     if debug:
         logger.setLevel(logging.DEBUG)
@@ -31,8 +30,9 @@ def getLogger(name=__name__, debug=False):
     if debug:
         ch.setLevel(logging.DEBUG)
     formatter = TimeFormatter(
-        '%(asctime)s [%(levelname)s] %(name)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S.%F %Z(%z)')
+        "%(asctime)s [%(levelname)s] %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S.%F %Z(%z)",
+    )
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     return logger
