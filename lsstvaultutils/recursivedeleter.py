@@ -3,7 +3,7 @@
 """
 
 import click
-import hvac
+import hvac  # type: ignore
 from .timeformatter import getLogger
 
 

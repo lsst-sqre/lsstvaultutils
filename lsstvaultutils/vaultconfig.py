@@ -1,7 +1,7 @@
-import hvac
+import hvac  # type:ignore
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import List, Dict, Optional
 
@@ -47,10 +47,9 @@ class VaultConfig:
         skip_list: Optional[List[str]],
         secret_file: Optional[str] = None,
     ):
-        self.vault_address: str = os.getenv("VAULT_ADDR")
+        self.vault_address: Optional[str] = os.getenv("VAULT_ADDR")
         self.secret: Optional[Dict[str, str]] = None
         self.enclaves: Dict[str, Enclave] = {}
-        self.skip_list: List[str] = []
         if vault_address:
             self.vault_address = vault_address
         if secret_file:
@@ -59,8 +58,8 @@ class VaultConfig:
         with open(vault_file, "r") as f:
             vault_dict = json.load(f)
         for item in vault_dict:
-            name = list(item.keys())[0]
-            if name in skip_list:
+            name: str = list(item.keys())[0]
+            if skip_list and name in skip_list:
                 continue
             read_k = Keyset(**item[name]["read"])
             write_k = Keyset(**item[name]["write"])
@@ -133,9 +132,12 @@ class VaultConfig:
         client.token = self._get_write_key_for_enclave(enclave)
         assert client.is_authenticated()
         secret_path = "{}/{}".format(enclave.name, secret_name)
+        vstr = "add"
+        if verb == Verb.REMOVE:
+            vstr = "remove"
         if dry_run:
             print(
-                "Dry run: {} secret at ".format(verb)
+                "Dry run: {} secret at ".format(vstr)
                 + "{}/{}".format(self.vault_address, secret_path)
             )
         else:
