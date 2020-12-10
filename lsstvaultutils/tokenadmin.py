@@ -6,9 +6,9 @@ Vault admin token (or removes them).
 
 """
 import click
-import hvac
+import hvac  # type: ignore
 import json
-from hvac.exceptions import InvalidPath
+from hvac.exceptions import InvalidPath  # type: ignore
 from .recursivedeleter import RecursiveDeleter
 from .timeformatter import getLogger
 

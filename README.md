@@ -15,31 +15,36 @@ for Kubernetes secrets.  Those are organized as follows:
 `secret/k8s_operator/:instance:`
 
 These secrets are typically created and injected at cluster creation
-time; in the case of the LSP deployment, this is scripted.
+time; in the case of the LSP deployment, this is scripted.  We
+use [[Vault
+Secrets Operator][https://github.com/ricoberger/vault-secrets-operator]]
+to automatically manage the translation of vault secrets into Kubernetes
+secrets.
 
 The secondary, more flexible, use case is to use the LSST vault as a
 generalized key-value store.
 
-The current plan is for the LSST vault to be organized with secrets
-under `secret` as follows:
+When used in this mode, the LSST vault is organized with secrets under
+`secret` as follows:
 
 `secret/:subsystem:/:team:/:category:/:instance:`
 
-As an example, secrets for the `nublado.lsst.codes` instance of
-the LSST Science Platform Notebook Aspect are stored in
-`secret/dm/square/nublado/nublado.lsst.codes`.  Underneath that
-there are `hub`, `proxy`, and `tls` secret folders, each of which has a
-number of individual secrets,
-e.g. `secret/dm/square/nublado/nublado.lsst.codes/hub/oauth_secret`.
+Each of these vault paths, terminating in `:instance:` is referred to as
+an enclave in our nomenclature.  An enclave has both a read and a write
+token.
 
-Note that these secrets are *not* accessible to the administrative user
-that created the token pair and policies.  They are accessed through one
-of those tokens.
+The way an enclave is used is that the user will populate the secret
+tree under that enclave with the write token, and then use the read
+token for automated data retrieval.  In the case of
+`vault-secrets-operator` it is the read key that should be used to
+populate K8s secrets from the vault secrets.
 
-We assume that each secret has its own folder, whose name is the secret
-key, inside of which the keyname is `value`.  This makes translating
-back and forth between Vault secrets and Kubernetes secrets (which have
-multiple key-value pairs) much easier.
+Note that secrets in an enclave are *not* accessible to the
+administrative user that created the enclave, its token pair, and its
+policies.  Those secrets are only accessed through either the enclave's
+read or its write token.
+
+## Usage
 
 ### Tokens
 
@@ -57,14 +62,18 @@ where `role` is one of `read` or `write` and `type` is one of `id` or
 should be the token attached to the `delegator` policy created
 above).
 
-There are two tokens for each path, comprising the "token pair".  These
-are `read` and `write`.
+There are two tokens for each enclave, comprising the "token pair".
+These are `read` and `write`.
 
 It is our intention that a runtime system have access to the `read`
 token to be able to read (but not update) secrets, and that the
 administrators of such a system have access to the `write` token to
-create, update, and remove secrets.  We have provided a tool that allows
-easy copying of Kubernetes secrets to and from Vault.
+create, update, and remove secrets.
+
+We previously provided a tool that allowed easy copying of Kubernetes
+secrets to and from Vault.  That tool has now been removed, because
+`vault-secrets-operator` is a Kubernetes operator that provides
+automated synchronization of secrets.
 
 ### Policies
 
@@ -78,10 +87,7 @@ destroying these policies.
 
 The package name is `lsstvaultutils`.  Its functional classes are:
 
-1. `SecretCopier` -- this copies secrets between the current Kubernetes
-   context and a Vault instance.
-   
-2. `AdminTool` -- this highly LSST-specific class allows you to specify a
+1. `AdminTool` -- this highly LSST-specific class allows you to specify a
    path under the Vault secret store, and it will generate two tokens
    (read and write) for manipulating secrets under the path.  It
    stores those under secret/delegated, so that an admin can find (and,
@@ -92,6 +98,10 @@ The package name is `lsstvaultutils`.  Its functional classes are:
    data at the same time as the tokens are revoked.  There is also a
    function to display the IDs and accessors of the token pair
    associated with the path.
+
+2. `VaultConfig` -- this is another very LSST-specific class which is
+   useful for adding or removing secrets at a given path across multiple
+   vault enclaves.
    
 3. `RecursiveDeleter` -- this adds a recursive deletion feature to Vault
    for removing a whole secret tree at a time.
@@ -106,24 +116,21 @@ classes.
 The major functionality of these classes is also exposed as standalone
 programs.
 
-1. `copyk2v` -- copy the contents of a  Kubernetes secret to a Vault
-   secret path.
-
-2. `copyv2k` -- copy a set of Vault secrets at a specified path to a
-   Kubernetes secret.
-   
-3. `tokenadmin` -- Create or revoke token sets for a given Vault secret
+1. `tokenadmin` -- Create or revoke token sets for a given Vault secret
    path, or display the token IDs and accessors for that path.
-   
-4. `vaultrmrf` -- Remove a Vault secret path and everything underneath
+
+2. `multisecret` -- Create or remove a secret path across multiple Vault
+   enclaves.  This is useful when adding a new feature to a K8s-managed
+   Science Platform application, for instance.
+
+3. `vaultrmrf` -- Remove a Vault secret path and everything underneath
    it.  As is implied by the name, this is a fairly dangerous operation.
 
 ## Example Workflow
 
-We will go through a workflow that exercises all of the standalone
-programs, by creating a token pair, creating some secrets, copying the
-secrets from Vault to Kubernetes and back again, deleting a secret tree,
-and finally deleting the token pair.
+We will go through a workflow that exercises `tokenadmin` and
+`vaultrmrf` by creating a token pair, creating some secrets, deleting a
+secret tree, and finally deleting the token pair.
 
 ### Create a token pair.
 
@@ -280,98 +287,10 @@ Read one back:
       "warnings": null
     }
 
-### Copy secrets to Kubernetes
-
-Now let's create Kubernetes secrets from these.  Do whatever you need to
-do in order to get a current authenticated Kubernetes context.
-
-Switch to the `read` token--we don't need to use a `write` token to copy
-from Vault to Kubernetes.  The Kubernetes user must be able to create
-secrets, of course, but that's got nothing to do with Vault tokens.
-
-`export VAULT_TOKEN="s.3nyTeqdWiINKIKNtuoIDtD9D"`
-
-Then we'll copy a set of secrets from Vault to Kubernetes:
-
-    (vaultutils) adam@ixitxachitl:~$ copyv2k --debug dm/test/group1 testg1
-    2019-03-04 14:54:52.855 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Debug logging started.
-    2019-03-04 14:54:52.855 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Acquiring Vault client for 'https://35.184.246.111'.
-    2019-03-04 14:54:53.117 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Acquiring k8s client.
-    2019-03-04 14:54:53.249 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Reading secret from 'dm/test/group1'.
-    2019-03-04 14:54:53.378 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | 'dm/test/group1' is a set of values.
-    2019-03-04 14:54:53.692 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Determining whether secret 'testg1'exists in namespace 'nublado'.
-    2019-03-04 14:54:53.971 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Secret found.
-    2019-03-04 14:54:53.971 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Base64-encoding secret data
-    2019-03-04 14:54:53.971 MST(-0700) [DEBUG] lsstvaultutils.secretcopier | Updating secret.
-
-Repeat the process for the second group; we'll omit --debug this time.
-
-    (vaultutils) adam@ixitxachitl:~$ copyv2k dm/test/group2 testg2
-    (vaultutils) adam@ixitxachitl:~$
-
-Now let's see if the copy worked.
-
-    (vaultutils) adam@ixitxachitl:~$ kubectl get secret -o yaml testg2
-    apiVersion: v1
-    data:
-      king: Zmluaw==
-    kind: Secret
-    metadata:
-      creationTimestamp: 2019-03-04T21:55:47Z
-      name: testg2
-      namespace: nublado
-      resourceVersion: "10389477"
-      selfLink: /api/v1/namespaces/nublado/secrets/testg2
-      uid: 445509ca-3ec8-11e9-a1ce-42010a800032
-    type: Opaque
-
-Decode that secret:
-
-    (vaultutils) adam@ixitxachitl:/tmp$ echo -n Zmluaw== | base64 -D -
-    fink
-
-### Copy secret from Kubernetes to Vault
-
-Go back to the "write" token:
-
-    export VAULT_TOKEN="s.4l4eDdLMyD436RsjRqlI11cD"
-
-Copy the secret to a new Vault path:
-
-    (vaultutils) adam@ixitxachitl:~$ copyk2v testg1 dm/test/copy1
-    (vaultutils) adam@ixitxachitl:~$
-
-Read a value (we _could_ switch to the Vault `read` token, but we don't
-have to--`write` is also allowed to read) back:
-
-    (vaultutils) adam@ixitxachitl:/tmp$ vault kv get secret/dm/square/copy1/foo
-	{
-      "request_id": "7a509ffc-eaf6-ee43-0d6b-d6bc4fe08a8b",
-      "lease_id": "",
-      "lease_duration": 0,
-      "renewable": false,
-      "data": {
-        "data": {
-          "value": "bar"
-        },
-        "metadata": {
-          "created_time": "2019-03-04T22:01:57.690906156Z",
-          "deletion_time": "",
-          "destroyed": false,
-          "version": 1
-        }
-      },
-      "warnings": null
-    }
-
-
 ### Recursively remove a secret tree
 
-Let's say we didn't really want to do that last copy.  We can easily
-remove the tree.
-
-Then we can use the `vaultrmrf` command (and the write token) to delete
-the tree.
+Let's say we didn't really want those secrets after all.  We can easily
+remove the tree with the `vaultrmrf` command and the write token.
 
     (vaultutils) adam@ixitxachitl:~$ vaultrmrf --debug dm/test/copy1
     2019-03-04 15:05:47.920 MST(-0700) [DEBUG] lsstvaultutils.recursivedeleter | Debug logging started.
@@ -397,10 +316,6 @@ Trying to read the secret now will show it's gone:
 ### Revoke Token Pair and remove data
 
 Now we will clean up:
-
-    (vaultutils) adam@ixitxachitl:~$ kubectl delete secret testg1 testg2
-    secret "testg1" deleted
-    secret "testg2" deleted
 
 We go back to an administrative token to revoke our token pair (by
 setting `VAULT_TOKEN` to an appropriate value), and while we're at it we
@@ -525,3 +440,224 @@ previously ran again:
     Code: 403. Errors:
 
     * permission denied
+
+### Using multisecret
+
+In this workflow, we will use `multisecret` to add a secret to a
+Kubernetes `vault-secrets-operator` path.  We will add it to two enclaves,
+`data-dev.lsst.cloud` and `nublado.lsst.codes`, verify that the secrets
+were created, and then remove them, also with `multisecret`.
+
+First we ensure we have `lsstvaultutils` installed into our active
+environment (that's what the `(lvu)` at the front of the prompt tells
+us) and then we run `multisecret --help`:
+
+	Usage: multisecret [OPTIONS] COMMAND [ARGS]...
+
+	  A tool to manipulate secrets in the same relative location across vault
+	  enclaves.
+
+	  --vault-address is a string representing a URL for a Vault implementation,
+	  e.g. "vault.lsst.codes".  If unspecified, the value of the environment
+	  variable VAULT_ADDR will be used.  It that isn't specified either, the
+	  default of "http://localhost:8200" will be used.
+
+	  --secret-name is a string representing the name of the secret relative to
+	  the top of the enclave, e.g. "pull-secret".
+
+	  --secret-file is only used with the "add" command.  It is a path to a JSON
+	  document that specifies the contents of the secret you want to inject, as
+	  a single object with key-value pairs, each pair being the name of the item
+	  within the secret and its value.
+
+	  --vault-file is a path to a file that contains a JSON document that is a
+	  list of enclaves (each one being a dict whose only key is the name of the
+	  top of the vault path for the enclave, and whose values are pair of dicts,
+	  "read" and "write", each a dict containing two keys, "accessor" and "id",
+	  whose values are the vault accessor and the vault token for its respective
+	  context within the enclave).  Not by coincidence, this is the form in
+	  which the vault document exists in SQuaRE's 1password.
+
+	  --omit may be specified multiple times; each time it is specified, it is
+	  the name of the enclave to skip when updating vaults.  This is helpful,
+	  for example, to *not* put the SQuaRE docker pull password into third-party
+	  implementations that rely on vault.lsst.codes.
+
+	  --dry-run is a boolean flag; if it is set, no change to the vault will
+	  actually be made, although the tool will report on the changes it would
+	  have done.
+
+	Options:
+	  -a, --vault-address TEXT
+	  -n, --secret-name TEXT    [required]
+	  -s, --secret-file TEXT
+	  -v, --vault-file TEXT     [required]
+	  -o, --omit TEXT
+	  -x, --dry-run
+	  --help                    Show this message and exit.
+
+	Commands:
+	  add     Add a secret across enclaves.
+	  remove  Remove a secret from multiple enclaves.
+
+Let's set up a working directory to hold our configuration and configure
+vault:
+
+    (lvu) adam@air-wired:~/git/lsstvaultutils$ mkdir -p ~/Documents/src/vault-doc-test
+    (lvu) adam@air-wired:~/git/lsstvaultutils$ cd ~/Documents/src/vault-doc-test
+    (lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_ADDR="https://vault.lsst.codes"
+    (lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_FORMAT="json"
+    (lvu) adam@air-wired:~/Documents/src/vault-doc-test$
+
+Armed with this knowledge, we prepare a multi-enclave file.  We will
+call it `vault-nb-idf` and its contents will look like the following,
+except with actual keys.
+
+	[
+	  {
+		"k8s_operator/nublado.lsst.codes": {
+		  "read": {
+			"accessor": "[REDACTED]",
+			"id": "[REDACTED]"
+		  },
+		  "write": {
+			"accessor": "[REDACTED]",
+			"id": "[REDACTED]"
+		  }
+		}
+	  },
+	  {
+		"k8s_operator/data-dev.lsst.cloud": {
+		  "read": {
+			"accessor": "[REDACTED]",
+			"id": "[REDACTED]"
+		  },
+		  "write": {
+			"accessor": "[REDACTED]",
+			"id": "[REDACTED]"
+		  }
+		}
+	  }
+	]
+
+Next we'll create the payload.  `testcase.json` contains simply:
+
+    { "foo": "bar" }
+
+Let's verify that our new secret (which we will call simply `test`) does
+not exist in either enclave yet.  I have put the read tokens into other
+shell variables that are, for obvious reasons, not in this document:
+
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv list secret/k8s_operator/data-dev.lsst.cloud
+	[
+	  "cert-manager",
+	  "gafaelfawr",
+	  "log",
+	  "mobu",
+	  "nublado",
+	  "nublado2",
+	  "postgres",
+	  "pull-secret",
+	  "tap"
+	]
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_TOKEN=${NLC_READ_TOKEN}
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv list secret/k8s_operator/nublado.lsst.codes
+	[
+	  "cert-manager",
+	  "gafaelfawr",
+	  "jwt_authorizer",
+	  "mobu",
+	  "nublado",
+	  "postgres",
+	  "tap"
+	]
+
+Let's run it with `--dry-run` first to make sure it looks correct:
+
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ multisecret --vault-address=https://vault.lsst.codes --secret-name test --secret-file testcase.json --vault-file vault-nb-idf.json --dry-run add
+	Dry run: add secret at https://vault.lsst.codes/k8s_operator/nublado.lsst.codes/test
+	Dry run: add secret at https://vault.lsst.codes/k8s_operator/data-dev.lsst.cloud/test
+
+Seems right.  Repeat without `--dry-run`.
+
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ multisecret --vault-address=https://vault.lsst.codes --secret-name test --secret-file testcase.json --vault-file vault-nb-idf.json add
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$
+
+Verify that the secrets were made:
+
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_TOKEN=${DLC_READ_TOKEN}
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv get secret/k8s_operator/data-dev.lsst.cloud/test
+	{
+	  "request_id": "bb53344a-31e9-81d3-32c2-5f2f895d7554",
+	  "lease_id": "",
+	  "lease_duration": 0,
+	  "renewable": false,
+	  "data": {
+		"data": {
+		  "foo": "bar"
+		},
+		"metadata": {
+		  "created_time": "2020-12-10T19:18:58.345274962Z",
+		  "deletion_time": "",
+		  "destroyed": false,
+		  "version": 1
+		}
+	  },
+	  "warnings": null
+	}
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_TOKEN=${NLC_READ_TOKEN}
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv get secret/k8s_operator/nublado.lsst.codes/test
+	{
+	  "request_id": "5f69665d-e8ca-f9a3-aa69-5fe12c1784c0",
+	  "lease_id": "",
+	  "lease_duration": 0,
+	  "renewable": false,
+	  "data": {
+		"data": {
+		  "foo": "bar"
+		},
+		"metadata": {
+		  "created_time": "2020-12-10T19:18:57.631480686Z",
+		  "deletion_time": "",
+		  "destroyed": false,
+		  "version": 1
+		}
+	  },
+	  "warnings": null
+	}
+
+And now destroy them:
+
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ multisecret --vault-address=https://vault.lsst.codes --secret-name test --vault-file vault-nb-idf.json remove
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$
+
+And verify they no longer exist:
+
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_TOKEN=${DLC_READ_TOKEN}
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv get secret/k8s_operator/data-dev.lsst.cloud/test
+	No value found at secret/data/k8s_operator/data-dev.lsst.cloud/test
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv list secret/k8s_operator/data-dev.lsst.cloud
+	[
+	  "cert-manager",
+	  "gafaelfawr",
+	  "log",
+	  "mobu",
+	  "nublado",
+	  "nublado2",
+	  "postgres",
+	  "pull-secret",
+	  "tap"
+	]
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ export VAULT_TOKEN=${NLC_READ_TOKEN}
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv get secret/k8s_operator/nublado.lsst.codes/test
+	No value found at secret/data/k8s_operator/nublado.lsst.codes/test
+	(lvu) adam@air-wired:~/Documents/src/vault-doc-test$ vault kv list secret/k8s_operator/nublado.lsst.codes
+	[
+	  "cert-manager",
+	  "gafaelfawr",
+	  "jwt_authorizer",
+	  "mobu",
+	  "nublado",
+	  "postgres",
+	  "tap"
+	]
