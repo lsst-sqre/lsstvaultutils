@@ -40,6 +40,7 @@ setup(
     version=get_version("%s/_version.py" % PACKAGENAME),
     description=DESCRIPTION,
     long_description=long_description,
+    long_description_content_type="text/markdown",
     url=URL,
     author=AUTHOR,
     author_email=AUTHOR_EMAIL,
