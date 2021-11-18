@@ -16,8 +16,8 @@ for Kubernetes secrets.  Those are organized as follows:
 
 These secrets are typically created and injected at cluster creation
 time; in the case of the LSP deployment, this is scripted.  We
-use [[Vault
-Secrets Operator][https://github.com/ricoberger/vault-secrets-operator]]
+use [Vault
+Secrets Operator](https://github.com/ricoberger/vault-secrets-operator)
 to automatically manage the translation of vault secrets into Kubernetes
 secrets.
 
