@@ -1,0 +1,53 @@
+name: CI
+
+"on":
+  push:
+    branches-ignore:
+      # These should always correspond to pull requests, so ignore them for
+      # the push trigger and let them be triggered by the pull_request
+      # trigger, avoiding running the workflow twice.  This is a minor
+      # optimization so there's no need to ensure this is comprehensive.
+      - "dependabot/**"
+      - "renovate/**"
+      - "tickets/**"
+      - "u/**"
+    tags:
+      - "*"
+  pull_request: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python:
+          - "3.9"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.0
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Cache tox environments
+        id: cache-tox
+        uses: actions/cache@v3
+        with:
+          path: .tox
+          # requirements/*.txt and pyproject.toml have versioning info
+          # that would impact the tox environment.
+          key: tox-${{ matrix.python }}-${{ hashFiles('requirements/*.txt') }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            tox-${{ matrix.python }}-${{ hashFiles('requirements/*.txt') }}-
+
+      - name: Run tox
+        run: tox -e py,coverage-report,typing
