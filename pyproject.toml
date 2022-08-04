@@ -98,7 +98,6 @@ known_first_party = ["lsstvaultutils", "tests"]
 skip = ["docs/conf.py"]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 python_files = [
     "tests/*.py",
     "tests/*/*.py"
