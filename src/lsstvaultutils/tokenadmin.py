@@ -5,10 +5,13 @@ secret space, and stores those token IDs in a place accessible to a
 Vault admin token (or removes them).
 
 """
-import click
-import hvac  # type: ignore
 import json
-from hvac.exceptions import InvalidPath  # type: ignore
+from typing import Dict
+
+import click
+import hvac
+from hvac.exceptions import InvalidPath
+
 from .recursivedeleter import RecursiveDeleter
 from .timeformatter import getLogger
 
@@ -52,17 +55,17 @@ TOKEN_ROOT = "delegated"
     "--debug", envvar="DEBUG", is_flag=True, help="Enable debugging."
 )
 def standalone(
-    verb,
-    vault_secret_path,
-    url,
-    token,
-    cacert,
-    ttl,
-    overwrite,
-    display,
-    delete_data,
-    debug,
-):
+    verb: str,
+    vault_secret_path: str,
+    url: str,
+    token: str,
+    cacert: str,
+    ttl: str,
+    overwrite: bool,
+    display: bool,
+    delete_data: bool,
+    debug: bool,
+) -> None:
     """Manage tokens that allow access to and control over a particular
     Vault secret path.  Verbs are 'create', 'revoke', and 'display'.
     """
@@ -72,7 +75,7 @@ def standalone(
     client.execute(verb, vault_secret_path)
 
 
-def strip_slashes(path):
+def strip_slashes(path: str) -> str:
     """Strip leading and trailing slashes."""
     while path[0] == "/":
         path = path[1:]
@@ -81,7 +84,7 @@ def strip_slashes(path):
     return path
 
 
-def strip_leading_secret(path):
+def strip_leading_secret(path: str) -> str:
     """Strip leading 'secret/'"""
     if path[:7].lower() == "secret/":
         path = path[7:]
@@ -97,15 +100,15 @@ class AdminTool(object):
 
     def __init__(
         self,
-        url,
-        token,
-        cacert,
-        ttl="8766h",
-        overwrite=False,
-        display=False,
-        delete_data=False,
-        debug=False,
-    ):
+        url: str,
+        token: str,
+        cacert: str,
+        ttl: str = "8766h",
+        overwrite: bool = False,
+        display: bool = False,
+        delete_data: bool = False,
+        debug: bool = False,
+    ) -> None:
         self.logger = getLogger(name=__name__, debug=debug)
         self.logger.debug("Debug logging started.")
         self.ttl = ttl
@@ -121,7 +124,9 @@ class AdminTool(object):
             )
         self.vault_client = self.get_vault_client(url, token, cacert)
 
-    def get_vault_client(self, url, token, cacert):
+    def get_vault_client(
+        self, url: str, token: str, cacert: str
+    ) -> hvac.Client:
         """Acquire a Vault client."""
         self.logger.debug("Getting Vault client for '%s'." % url)
         client = hvac.Client(url=url, token=token, verify=cacert)
@@ -132,7 +137,7 @@ class AdminTool(object):
         self.cacert = cacert
         return client
 
-    def execute(self, verb, secret_path):
+    def execute(self, verb: str, secret_path: str) -> None:
         """Create or revoke a set of tokens for a path."""
         verb = verb.lower()
         secret_path = strip_slashes(secret_path)
@@ -150,7 +155,7 @@ class AdminTool(object):
             "Verb must be one of 'create', 'revoke', or" + " 'display'."
         )
 
-    def create(self, path):
+    def create(self, path: str) -> None:
         """Create policies and token set for path."""
         self.logger.debug("Creating policies and tokens for '%s'." % path)
         self.create_secret_policies(path)
@@ -158,7 +163,7 @@ class AdminTool(object):
         if self.display:
             self.display_tokens(path)
 
-    def revoke(self, path):
+    def revoke(self, path: str) -> None:
         """Remove policies and token set for path."""
         self.logger.debug(
             "Revoking tokens and removing policies for" + " '%s'." % path
@@ -178,10 +183,10 @@ class AdminTool(object):
         self.delete_tokens(path)
         self.destroy_secret_policies(path)
 
-    def display_tokens(self, path):
+    def display_tokens(self, path: str) -> None:
         """Print tokens and accessors for path in JSON format on stdout."""
         self.logger.debug("Getting tokens for '%s'." % path)
-        token = {}
+        token: Dict[str, Dict[str, Dict[str, str]]] = {}
         for pol in "read", "write":
             token[pol] = {}
             for item in "id", "accessor":
@@ -194,7 +199,7 @@ class AdminTool(object):
         displayval[path] = token
         print(json.dumps(displayval, sort_keys=True, indent=4))
 
-    def create_secret_policies(self, path):
+    def create_secret_policies(self, path: str) -> None:
         """Create policies for path."""
         self.logger.debug("Creating policies for '%s'." % path)
         if self.check_policy_existence(path) and not self.overwrite:
@@ -203,7 +208,7 @@ class AdminTool(object):
         for pol in ["read", "write"]:
             self.create_secret_policy(path, pol)
 
-    def check_policy_existence(self, path):
+    def check_policy_existence(self, path: str) -> bool:
         ppath = POLICY_ROOT + "/" + path
         self.logger.debug("Checking for existence of policy '%s'." % ppath)
         try:
@@ -214,7 +219,7 @@ class AdminTool(object):
             return True
         return False
 
-    def create_secret_policy(self, path, pol):
+    def create_secret_policy(self, path: str, pol: str) -> None:
         """Create specific policy ('read', 'write') for path."""
         pols = ["read", "write"]
         polstr = ""
@@ -250,7 +255,7 @@ class AdminTool(object):
         self.logger.debug("Policy path: %s" % ppath)
         self.vault_client._sys.create_or_update_policy(ppath, polstr)
 
-    def destroy_secret_policies(self, path):
+    def destroy_secret_policies(self, path: str) -> None:
         """Destroy policies for secret path."""
         polpath = POLICY_ROOT + "/" + path
         for pol in ["read", "write"]:
@@ -258,7 +263,7 @@ class AdminTool(object):
             self.logger.debug("Deleting policy for '%s'." % ppath)
             self.vault_client._sys.delete_policy(ppath)
 
-    def create_tokens(self, path):
+    def create_tokens(self, path: str) -> None:
         """Create set of tokens for path."""
         if self.check_token_existence(path):
             self.logger.warning("Tokens for path '%s' already exist." % path)
@@ -271,7 +276,7 @@ class AdminTool(object):
             self.revoke(path)
         self.create_rw_tokens(path)
 
-    def check_token_existence(self, path):
+    def check_token_existence(self, path: str) -> bool:
         there = self.vault_client.list(
             "secret/metadata/" + TOKEN_ROOT + "/" + path
         )
@@ -279,14 +284,14 @@ class AdminTool(object):
             return True
         return False
 
-    def create_rw_tokens(self, path):
+    def create_rw_tokens(self, path: str) -> None:
         """Create read and write tokens for path."""
         client = self.vault_client
         for role in ["read", "write"]:
             policies = [(POLICY_ROOT + "/" + path + "/" + role)]
             self.logger.debug("Creating token for '%s/%s'." % (path, role))
             self.logger.debug(" - policies '%r'." % policies)
-            resp = client.create_token(ttl=self.ttl, policies=policies)
+            resp = client.auth.token.create(ttl=self.ttl, policies=policies)
             auth = resp["auth"]
             tok = auth["client_token"]
             resp = client.lookup_token(token=tok)
@@ -294,7 +299,9 @@ class AdminTool(object):
             accessor = resp["data"]["accessor"]
             self.store_token(tok_id, accessor, role, path)
 
-    def store_token(self, tok_id, accessor, role, path):
+    def store_token(
+        self, tok_id: str, accessor: str, role: str, path: str
+    ) -> None:
         """Store token id and accessor for path/role combo."""
         roles = ["read", "write"]
         if role not in roles:
@@ -309,7 +316,7 @@ class AdminTool(object):
             path=toksec + "/accessor", secret={"value": accessor}
         )
 
-    def delete_tokens(self, path):
+    def delete_tokens(self, path: str) -> None:
         """Revoke tokens for path and remove token id store."""
         tok_store = TOKEN_ROOT + "/" + path
         for role in ["read", "write"]:

@@ -8,8 +8,10 @@ class TimeFormatter(logging.Formatter):
      python-logging-use-milliseconds-in-time-format
     """
 
-    def formatTime(self, record, datefmt=None):
-        ct = self.converter(record.created)
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: str = None
+    ) -> str:
+        ct = self.converter(record.created)  # type: ignore
         if datefmt:
             if "%F" in datefmt:
                 msec = "%03d" % record.msecs
@@ -21,7 +23,7 @@ class TimeFormatter(logging.Formatter):
         return s
 
 
-def getLogger(name=__name__, debug=False):
+def getLogger(name: str = __name__, debug: bool = False) -> logging.Logger:
     """Convenience function to return configured logger with milliseconds."""
     logger = logging.getLogger(name)
     if debug:

@@ -1,6 +1,9 @@
 # CLI command to allow manipulation of secrets in the same relative place
 #  across Vault enclaves.
+from typing import List
+
 import click
+
 from .vaultconfig import VaultConfig
 
 
@@ -13,8 +16,14 @@ from .vaultconfig import VaultConfig
 @click.option("--dry-run", "-x", is_flag=True)
 @click.pass_context
 def standalone(
-    ctx, vault_address, secret_name, secret_file, vault_file, omit, dry_run
-):
+    ctx: click.Context,
+    vault_address: str,
+    secret_name: str,
+    secret_file: str,
+    vault_file: str,
+    omit: List[str],
+    dry_run: bool,
+) -> None:
     """A tool to manipulate secrets in the same relative location across
     vault enclaves.
 
@@ -62,7 +71,7 @@ def standalone(
 
 @standalone.command()
 @click.pass_context
-def add(ctx):
+def add(ctx: click.Context) -> None:
     """
     Add a secret across enclaves.
 
@@ -81,7 +90,7 @@ def add(ctx):
 
 @standalone.command()
 @click.pass_context
-def remove(ctx):
+def remove(ctx: click.Context) -> None:
     """
     Remove a secret from multiple enclaves.
     """
