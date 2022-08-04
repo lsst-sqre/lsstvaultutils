@@ -3,7 +3,8 @@
 """
 
 import click
-import hvac  # type: ignore
+import hvac
+
 from .timeformatter import getLogger
 
 
@@ -17,7 +18,9 @@ from .timeformatter import getLogger
 @click.option(
     "--debug", envvar="DEBUG", is_flag=True, help="Enable debugging."
 )
-def standalone(vault_path, url, token, cacert, debug):
+def standalone(
+    vault_path: str, url: str, token: str, cacert: str, debug: bool
+) -> None:
     client = RecursiveDeleter(url, token, cacert, debug)
     if vault_path[:7].lower() == "secret/":
         client.logger.debug("Removing 'secret/' from front of path.")
@@ -28,7 +31,7 @@ def standalone(vault_path, url, token, cacert, debug):
 class RecursiveDeleter(object):
     """Class to remove a whole secret tree from Vault."""
 
-    def __init__(self, url, token, cacert, debug):
+    def __init__(self, url: str, token: str, cacert: str, debug: bool):
         self.logger = getLogger(name=__name__, debug=debug)
         self.logger.debug("Debug logging started.")
         if not url and token and cacert:
@@ -39,14 +42,16 @@ class RecursiveDeleter(object):
             )
         self.vault_client = self.get_vault_client(url, token, cacert)
 
-    def get_vault_client(self, url, token, cacert):
+    def get_vault_client(
+        self, url: str, token: str, cacert: str
+    ) -> hvac.Client:
         """Acquire a Vault client."""
         self.logger.debug("Acquiring Vault client for '%s'." % url)
-        client = hvac.Client(url=url, token=token, verify=cacert)
+        client: hvac.Client = hvac.Client(url=url, token=token, verify=cacert)
         assert client.is_authenticated()
         return client
 
-    def recursive_delete(self, path):
+    def recursive_delete(self, path: str) -> None:
         """Delete secret path and everything under it."""
         # strip leading and trailing slashes
         while path[:1] == "/":

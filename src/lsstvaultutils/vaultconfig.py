@@ -1,9 +1,10 @@
-import hvac  # type:ignore
 import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+import hvac
 
 
 class Verb(Enum):
@@ -141,7 +142,7 @@ class VaultConfig:
                 + "{}/{}".format(self.vault_address, secret_path)
             )
         else:
-            if verb == verb.REMOVE:
+            if verb == Verb.REMOVE:
                 client.secrets.kv.v2.delete_metadata_and_all_versions(
                     path=secret_path
                 )
