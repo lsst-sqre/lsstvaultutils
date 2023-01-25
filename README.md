@@ -12,12 +12,14 @@ detailed below.
 The primary use case for the LSST vault has been to act as a repository
 for Kubernetes secrets.  Those are organized as follows:
 
-`secret/k8s_operator/:instance:`
+```
+secret/k8s_operator/:instance:
+```
 
 These secrets are typically created and injected at cluster creation
 time; in the case of the LSP deployment, this is scripted.  We
-use [[Vault
-Secrets Operator][https://github.com/ricoberger/vault-secrets-operator]]
+use [Vault
+Secrets Operator](https://github.com/ricoberger/vault-secrets-operator)
 to automatically manage the translation of vault secrets into Kubernetes
 secrets.
 
@@ -27,7 +29,9 @@ generalized key-value store.
 When used in this mode, the LSST vault is organized with secrets under
 `secret` as follows:
 
-`secret/:subsystem:/:team:/:category:/:instance:`
+```
+secret/:subsystem:/:team:/:category:/:instance:
+```
 
 Each of these vault paths, terminating in `:instance:` is referred to as
 an enclave in our nomenclature.  An enclave has both a read and a write
@@ -213,11 +217,15 @@ installed, and the `vault` CLI is on my path.
 
 First, set Vault to use the `write` token:
 
-`export VAULT_TOKEN="s.4l4eDdLMyD436RsjRqlI11cD"`
+```
+export VAULT_TOKEN="s.4l4eDdLMyD436RsjRqlI11cD"
+```
 
 I like JSON output, so I'm going to set:
 
-`export VAULT_FORMAT=json`
+```
+export VAULT_FORMAT=json
+```
 
 Then use the vault client to add some secrets:
 
