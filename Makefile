@@ -1,18 +1,6 @@
-.PHONY: update-deps
-update-deps:
-	pip install --upgrade pip-tools pip setuptools
-	pip-compile --upgrade --build-isolation --generate-hashes --output-file requirements/main.txt requirements/main.in
-	pip-compile --upgrade --build-isolation --generate-hashes --output-file requirements/dev.txt requirements/dev.in
-
 .PHONY: init
 init:
-	pip install --upgrade pip setuptools wheel
-	pip install --editable .
-	pip install --upgrade -r requirements/main.txt -r requirements/dev.txt
-	rm -rf .tox
-	pip install --upgrade tox
+	pip install --upgrade pip tox pre-commit
+	pip install --upgrade -e ".[dev]"
 	pre-commit install
-
-.PHONY: update
-update: update-deps init
-
+	rm -rf .tox

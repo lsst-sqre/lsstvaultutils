@@ -1,5 +1,35 @@
+[project]
+name = "lsstvaultutils"
+description = "Tools for manipulating the Rubin Observatory Vault installation"
+license = { file = "LICENSE" }
+readme = "README.md"
+keywords = ["rubin", "lsst"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Natural Language :: English",
+    "Operating System :: POSIX",
+]
+requires-python = ">=3.8"
+dependencies = ["click", "hvac"]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["pytest", "mypy", "coverage"]
+
+[project.urls]
+Source = "https://github.com/lsst-sqre/lsstvaultutils"
+
+[project.scripts]
+multisecret = "lsstvaultutils.multisecret:standalone"
+vaultrmrf = "lsstvaultutils.recursivedeleter:standalone"
+tokenadmin = "lsstvaultutils.tokenadmin:standalone"
+
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4"]
+requires = ["setuptools>=61", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = 'setuptools.build_meta'
 
 [tool.setuptools_scm]
@@ -45,10 +75,21 @@ exclude = '''
 # Multi-line strings are implicitly treated by black as regular expressions
 
 [tool.isort]
-include_trailing_comma = true
-multi_line_output = 3
+profile = "black"
+line_length = 79
 known_first_party = ["lsstvaultutils", "tests"]
 skip = ["docs/conf.py"]
 
 [tool.pytest.ini_options]
 python_files = ["tests/*.py", "tests/*/*.py"]
+
+[tool.mypy]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+ignore_missing_imports = true
+local_partial_types = true
+no_implicit_reexport = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_ignores = true
