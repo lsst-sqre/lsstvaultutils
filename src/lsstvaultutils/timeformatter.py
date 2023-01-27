@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Optional
 
 
 class TimeFormatter(logging.Formatter):
@@ -9,7 +10,7 @@ class TimeFormatter(logging.Formatter):
     """
 
     def formatTime(
-        self, record: logging.LogRecord, datefmt: str = None
+        self, record: logging.LogRecord, datefmt: Optional[str] = None
     ) -> str:
         ct = self.converter(record.created)  # type: ignore
         if datefmt:
