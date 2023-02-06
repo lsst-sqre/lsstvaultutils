@@ -12,7 +12,7 @@ class TimeFormatter(logging.Formatter):
     def formatTime(
         self, record: logging.LogRecord, datefmt: Optional[str] = None
     ) -> str:
-        ct = self.converter(record.created)  # type: ignore
+        ct = self.converter(record.created)
         if datefmt:
             if "%F" in datefmt:
                 msec = "%03d" % record.msecs
