@@ -67,7 +67,8 @@ def standalone(
     debug: bool,
 ) -> None:
     """Manage tokens that allow access to and control over a particular
-    Vault secret path.  Verbs are 'create', 'revoke', and 'display'.
+    Vault secret path.  Verbs are 'create', 'revoke', 'revoke-write', and
+    'display'.
     """
     client = AdminTool(
         url, token, cacert, ttl, overwrite, display, delete_data, debug
@@ -116,6 +117,7 @@ class AdminTool(object):
         self.debug = debug
         self.display = display
         self.delete_data = delete_data
+        self.revoke_write_only = False
         if not url and token and cacert:
             raise ValueError(
                 "All of Vault URL, Vault Token, and Vault CA "
@@ -140,6 +142,9 @@ class AdminTool(object):
     def execute(self, verb: str, secret_path: str) -> None:
         """Create or revoke a set of tokens for a path."""
         verb = verb.lower()
+        if verb == "revoke-write":
+            verb = "revoke"
+            self.revoke_write_only = True
         secret_path = strip_slashes(secret_path)
         secret_path = strip_leading_secret(secret_path)
         if verb == "create":
@@ -152,7 +157,9 @@ class AdminTool(object):
             self.display_tokens(secret_path)
             return
         raise ValueError(
-            "Verb must be one of 'create', 'revoke', or" + " 'display'."
+            "Verb must be one of 'create', 'revoke', 'revoke-write"
+            + " or"
+            + " 'display'."
         )
 
     def create(self, path: str) -> None:
@@ -169,6 +176,8 @@ class AdminTool(object):
             "Revoking tokens and removing policies for" + " '%s'." % path
         )
         if self.delete_data:
+            if self.revoke_write_only:
+                raise ValueError("Will not delete data with revoke-write")
             token_path = TOKEN_ROOT + "/" + path + "/write/id"
             self.logger.debug("Getting write token for '%s'." % path)
             self.logger.debug("Reading value from '%s'." % token_path)
@@ -258,7 +267,10 @@ class AdminTool(object):
     def destroy_secret_policies(self, path: str) -> None:
         """Destroy policies for secret path."""
         polpath = POLICY_ROOT + "/" + path
-        for pol in ["read", "write"]:
+        policies = ["read", "write"]
+        if self.revoke_write_only:
+            policies = ["write"]
+        for pol in policies:
             ppath = polpath + "/" + pol
             self.logger.debug("Deleting policy for '%s'." % ppath)
             self.vault_client._sys.delete_policy(ppath)
@@ -319,7 +331,10 @@ class AdminTool(object):
     def delete_tokens(self, path: str) -> None:
         """Revoke tokens for path and remove token id store."""
         tok_store = TOKEN_ROOT + "/" + path
-        for role in ["read", "write"]:
+        roles = ["read", "write"]
+        if self.revoke_write_only:
+            roles = ["write"]
+        for role in roles:
             this_tok = tok_store + "/" + role
             id_secpath = this_tok + "/id"
             self.logger.debug(
