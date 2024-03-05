@@ -355,6 +355,8 @@ class AdminTool(object):
             self.vault_client.revoke_token(token=token)
         self.logger.debug("Deleting token store for '%s'." % path)
         dc = RecursiveDeleter(self.url, self.token, self.cacert, self.debug)
+        if self.revoke_write_only:
+            tok_store = f"{tok_store}/write"
         self.logger.debug("Recursive delete of: '%s'" % tok_store)
         dc.recursive_delete(tok_store)
 
